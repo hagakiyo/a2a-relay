@@ -73,6 +73,65 @@ def api_agents():
 def api_messages():
     return {"messages": list(messages.values())}
 
+
+@app.post("/api/register")
+def api_register(body: dict):
+    """REST API経由でエージェント登録（MCPツールが使えない場合の代替）"""
+    name = body.get("name", "")
+    description = body.get("description", "")
+    if not name:
+        return {"error": "name is required"}
+    now = datetime.now(timezone.utc).isoformat()
+    agents[name] = {
+        "name": name,
+        "description": description,
+        "registered_at": now,
+        "last_seen": now,
+    }
+    return {"result": f"エージェント '{name}' を登録しました。現在 {len(agents)} エージェントが登録済みです。"}
+
+
+@app.post("/api/send")
+def api_send(body: dict):
+    """REST API経由でメッセージ送信（MCPツールが使えない場合の代替）"""
+    to = body.get("to", "")
+    message = body.get("message", "")
+    from_agent = body.get("from_agent", "anonymous")
+    if not to or not message:
+        return {"error": "to and message are required"}
+    if to not in agents:
+        available = ", ".join(agents.keys()) if agents else "なし"
+        return {"error": f"エージェント '{to}' は未登録です。登録済み: {available}"}
+    if from_agent in agents:
+        agents[from_agent]["last_seen"] = datetime.now(timezone.utc).isoformat()
+    msg_id = str(uuid.uuid4())[:8]
+    now = datetime.now(timezone.utc).isoformat()
+    messages[msg_id] = {
+        "id": msg_id,
+        "from_agent": from_agent,
+        "to_agent": to,
+        "message": message,
+        "timestamp": now,
+        "status": "unread",
+        "reply": None,
+        "reply_timestamp": None,
+    }
+    return {"result": f"メッセージ送信完了。message_id: {msg_id}", "message_id": msg_id}
+
+
+@app.get("/api/check/{agent_name}")
+def api_check(agent_name: str):
+    """REST API経由で未読メッセージ取得"""
+    if agent_name in agents:
+        agents[agent_name]["last_seen"] = datetime.now(timezone.utc).isoformat()
+    unread = [
+        m for m in messages.values()
+        if m["to_agent"] == agent_name and m["status"] == "unread"
+    ]
+    for m in unread:
+        m["status"] = "read"
+    return {"unread_count": len(unread), "messages": unread}
+
 # === MCP サーバー ===
 
 mcp_server = FastMCP(
