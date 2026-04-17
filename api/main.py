@@ -65,6 +65,11 @@ def health():
         "messages": len(messages),
     }
 
+@app.head("/")
+def head_root():
+    """UptimeRobot等の監視サービス用HEADエンドポイント（200返却のみ）"""
+    return None
+
 @app.get("/api/agents")
 def api_agents():
     return {"agents": list(agents.values())}
